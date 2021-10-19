@@ -27,4 +27,26 @@ class Network(nn.Module):
         self.nb_action = nb_action
         self.fc1 = nn.Linear(input_size, 30)
         self.fc2 = nn.Linear(30, nb_action)
+
+    def forward(self, state):
+        x = F.relu(self.fc1(state))
+        q_values = self.fc2(x)
+        return q_values
+
+# Implementing Experience Replay
+        
+class ReplayMemory(object):
+    
+    def __init__(self, capacity: int):
+        self.capacity = capacity
+        self.memory = []
+        
+    def push(self, event):
+        self.memory.append(event)
+        if len(self.memory) > self.capacity:
+            del self.memory[0]
+    
+    def sample(self, batch_size):
+        samples = zip(*random.sample(self.memory, batch_size))
+        return map(lambda x: Variable(torch.cat(x, 0)), samples)
         
