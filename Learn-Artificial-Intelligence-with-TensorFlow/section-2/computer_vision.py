@@ -1,84 +1,106 @@
-# This is a sample Python script.
+import cifar10_model
+import cifar10_input
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
+import tensorflow as tf
 import os
 import argparse
 from glob import glob
 from pprint import pprint
 
-# import cifar10_model
-# import cifar10_input
-import tensorflow as tf
-"""
-File: templates/estimator_template.py
-Author: Brandon McKinzie
-"""
+parser = argparse.ArgumentParser(description="Train a CNN on CIFAR-10 dataset.")
+parser.add_argument('--batch_size', type=int, default=128)
+parser.add_argument('--data_dir', default='data/cifar')
+parser.add_argument('--model_dir', default='models/cifar')
+args = parser.parse_args()
 
-import tensorflow as tf
+# CIFAR-10 consists of 50K training examples and 10K eval examples.
+# Each image has size 32x32 (and depth 3 for RGB).
+CIFAR_TRAIN_SIZE = 50000
+CIFAR_EVAL_SIZE = 10000
+CIFAR_IMAGE_SIZE = 32
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-def input_fn():
-    """Estimators use notion of input_fn. We can use tf.data API to make
-    such an input_fn.
+def input_fn(data_dir, batch_size):
+    filenames = glob(os.path.join(data_dir, 'cifar-10-batches-bin', 'data_batch_*.bin'))
+    pprint(filenames)
 
-    We call this manually when specifying `lambda: input_fn(...)` as argument
-    to any of classifier.{train, evaluate, predict}.
+    depth = 3
+    height = width = CIFAR_IMAGE_SIZE
+    label_bytes = 1
+    image_bytes = height * width * depth
+    # Every record consists of a label followed by the image,
+    # with a fixed number of bytes for each.
+    record_bytes = label_bytes + image_bytes
 
-    Returns:
-        feature_cols: A dict containing key/value pairs that map feature column
-            names to `Tensor`s (or `SparseTensor`s) containing the corresponding
-            feature data.
-        labels: A `Tensor` containing your label (target) values (the values
-            your model aims to predict).
-    """
-    pass
+    def decode_line(value):
+        """Additional processing to perform on each line in dataset."""
+        record_bytes = tf.decode_raw(value, tf.uint8)
+        # The first bytes represent the label, which we convert from uint8->int32.
+        label = tf.to_int32(tf.strided_slice(record_bytes, [0], [label_bytes]))
+        # The remaining bytes after the label represent the image, which we reshape
+        # from [depth * height * width] to [depth, height, width].
+        depth_major = tf.reshape(
+            tf.strided_slice(record_bytes, [label_bytes], [label_bytes + image_bytes]),
+            [depth, height, width])
+        # Convert from [depth, height, width] to [height, width, depth].
+        uint8image = tf.transpose(depth_major, [1, 2, 0])
+        reshaped_image = tf.cast(uint8image, tf.float32)
+        # Randomly flip the image horizontally.
+        distorted_image = tf.image.random_flip_left_right(reshaped_image)
+        # Subtract off the mean and divide by the variance of the pixels.
+        float_image = tf.image.per_image_standardization(distorted_image)
+        # Set the shapes of tensors.
+        float_image.set_shape([height, width, 3])
+        label.set_shape([1])
+        return float_image, label
 
+    # Repeat infinitely.
+    dataset = tf.data.FixedLengthRecordDataset(filenames, record_bytes).repeat()
+    dataset = dataset.map(decode_line, num_parallel_calls=batch_size)
+
+    min_fraction_of_examples_in_queue = 0.4
+    min_queue_examples = int(CIFAR_TRAIN_SIZE * min_fraction_of_examples_in_queue)
+    dataset = dataset.shuffle(buffer_size=min_queue_examples + 3 * batch_size)
+
+    # Batch it up.
+    dataset = dataset.batch(batch_size)
+    iterator = dataset.make_one_shot_iterator()
+    image_batch, label_batch = iterator.get_next()
+    # Ensure we don't have any shape dimensions equal to None...
+    image_batch.set_shape([batch_size, height, width, 3])
+    label_batch = tf.squeeze(label_batch)
+    return image_batch, label_batch
 
 def model_fn(features, labels, mode, params):
-    """Required when making a custom Estimator, and passed as the first argument of
-    tf.estimator.Estimator(...).
+    logits = cifar10_model.inference(
+        image_batch=features,
+        batch_size=params.get('batch_size'))
+    loss = cifar10_model.loss(logits, labels)
+    train_op = cifar10_model.train(loss, batch_size=params.get('batch_size'))
 
-    Logic to do the following:
-        1. Configure the model via TensorFlow operations
-        2. Define the loss function for training/evaluation
-        3. Define the training operation/optimizer
-        4. Generate predictions
-        5. Return predictions/loss/train_op/eval_metric_ops in EstimatorSpec object
+    if mode == tf.estimator.ModeKeys.TRAIN:
+        logging_hook = tf.train.LoggingTensorHook({'loss': loss}, every_n_iter=1000)
+        return tf.estimator.EstimatorSpec(
+            mode,
+            loss=loss,
+            train_op=train_op,
+            training_hooks=[logging_hook])
 
-    Args:
-        features (required): A dict containing the features passed to the model via input_fn.
-        labels (required): A Tensor containing the labels passed to the model via input_fn. Will be empty for predict() calls, as these are the values the model will infer.
-        mode (required): One of the following tf.estimator.ModeKeys string values, which indicate
-            the context in which the model_fn was invoked:
-            - TRAIN: invoked in training mode, namely via a train() call.
-            - EVAL: invoked in evaluation mode, namely via an evaluate() call.
-            - PREDICT: invoked in predict mode, namely via a predict() call.
-        params (optional): hyperparamer dictionary.
+def main():
+    # Ensure data_dir has dataset and model_dir is cleared before training.
+    cifar10_input.maybe_download_and_extract(data_dir=args.data_dir)
+    if tf.gfile.Exists(args.model_dir):
+        tf.gfile.DeleteRecursively(args.model_dir)
+    tf.gfile.MakeDirs(args.model_dir)
 
-    Returns:
-        mode (required). The mode in which the model was run. Typically, you will
-            return the mode argument of the model_fn here.
-        predictions (required in PREDICT mode). A dict that maps key names of your
-            choice to Tensors containing the predictions from the model, e.g.:
-            `predictions = {"results": tensor_of_predictions}`
-            In PREDICT mode, the dict that you return in EstimatorSpec will
-            then be returned by predict(), so you can construct it in the format
-            in which you'd like to consume it.
-        loss (required in EVAL and TRAIN mode). A Tensor containing a scalar loss value:
-            the output of the model's loss function calculated over all the input examples.
-            This is used in TRAIN mode for error handling and logging, and is
-            automatically included as a metric in EVAL mode.
-        train_op (required only in TRAIN mode). An Op that runs one step of training.
-        eval_metric_ops (optional). A dict of name/value pairs specifying the metrics
-            that will be calculated when the model runs in EVAL mode. The name is a
-            label of your choice for the metric, and the value is the result of your
-            metric calculation. The tf.metrics module provides predefined functions for
-            a variety of common metrics. The following eval_metric_ops contains an
-            "accuracy" metric calculated using tf.metrics.accuracy:
-            `eval_metric_ops = { "accuracy": tf.metrics.accuracy(labels, predictions) }`
-            If you do not specify eval_metric_ops, only loss will be calculated during evaluation.
-    """
-    # return tf.estimator.EstimatorSpec(mode, predictions, loss, train_op, eval_metric_ops)
-    pass
+    classifier = tf.estimator.Estimator(
+        model_fn=model_fn,
+        model_dir=args.model_dir,
+        params={'batch_size': args.batch_size})
+    classifier.train(
+        input_fn=lambda: input_fn(args.data_dir, args.batch_size),
+        steps=10000)
+
+if __name__ == '__main__':
+    main()
