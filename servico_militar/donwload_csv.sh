@@ -1,0 +1,1 @@
+wget http://dadosabertos.eb.mil.br/arquivos/sermil/sermil2020.csv
