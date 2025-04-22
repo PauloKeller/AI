@@ -1,0 +1,7 @@
+from recomendacaoOF import similaridade
+similaridade('Ana','Marcos')
+0.3333333333333333
+similaridade('Ana','Pedro')
+0.2
+similaridade('Ana','Claudia')
+0.16139047779640892

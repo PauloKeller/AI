@@ -1,0 +1,5 @@
+from recomendacaoOF import clientes
+clientes['Ana']['Cartão de Crédito']
+1
+clientes['Ana']
+{'Cartão de Crédito': 1, 'Conta Corrente': 2, 'Poupança': 3, 'Renda Fixa': 4, 'Crédito Pessoal': 5}

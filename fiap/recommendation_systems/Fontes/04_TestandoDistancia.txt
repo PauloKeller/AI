@@ -1,0 +1,7 @@
+from recomendacaoOF import euclidiana
+euclidiana('Ana','Marcos')
+2.0
+euclidiana('Ana','Pedro')
+4.0
+euclidiana('Ana','Claudia')
+5.196152422706632

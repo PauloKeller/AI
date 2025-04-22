@@ -1,0 +1,9 @@
+from recomendacaoOF2 import getSimilares
+getSimilares('Ana')
+[(0.3333333333333333, 'Marcos'), (0.2, 'Pedro'), (0.16139047779640892, 'Claudia')]
+getSimilares('Marcos')
+[(0.36602540378443865, 'Pedro'), (0.3333333333333333, 'Ana'), (0.2240092377397959, 'Claudia')]
+getSimilares('Pedro')
+[(0.36602540378443865, 'Marcos'), (0.36602540378443865, 'Claudia'), (0.2, 'Ana')]
+getSimilares('Claudia')
+[(0.36602540378443865, 'Pedro'), (0.2240092377397959, 'Marcos'), (0.16139047779640892, 'Ana')]

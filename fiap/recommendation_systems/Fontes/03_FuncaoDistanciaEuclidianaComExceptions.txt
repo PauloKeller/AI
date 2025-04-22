@@ -1,0 +1,12 @@
+from math import sqrt
+def euclidiana(usuario1, usuario2):
+  si = {}
+  if not usuario1 in clientes: return -1
+  if not usuario2 in clientes: return -2
+  for item in clientes[usuario1]:
+      if item in clientes[usuario2]: si[item]=1
+  if len(si) == 0: return -3
+
+  soma = sum([pow(clientes[usuario1][item] - clientes[usuario2][item],2)
+                    for item in clientes[usuario1] if item in clientes[usuario2]])
+  return sqrt(soma)

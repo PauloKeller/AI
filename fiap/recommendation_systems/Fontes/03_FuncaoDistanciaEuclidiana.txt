@@ -1,0 +1,4 @@
+from math import sqrt
+def euclidiana(usuario1, usuario2):
+  return sqrt(sum([pow(clientes[usuario1][item] - clientes[usuario2][item],2)
+                        for item in clientes[usuario1] if item in clientes[usuario2]]))
